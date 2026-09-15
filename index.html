@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IQ Test</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app" id="app">
+
+    <!-- INTRO SCREEN -->
+    <section class="screen" id="screen-intro">
+      <div class="card intro-card">
+        <p class="eyebrow">Free online assessment</p>
+        <h1>Discover Your Estimated IQ</h1>
+        <p class="lede">
+          30 questions covering logic, numbers, verbal reasoning, and spatial patterns.
+          Takes about 15–20 minutes. Get an instant score with a category breakdown.
+        </p>
+
+        <ul class="feature-list">
+          <li><span class="dot"></span> 4 reasoning categories</li>
+          <li><span class="dot"></span> Instant results, no sign-up</li>
+          <li><span class="dot"></span> Nothing is saved or sent anywhere</li>
+        </ul>
+
+        <button class="btn btn-primary" id="btn-start">Start Test</button>
+
+        <p class="disclaimer">
+          This is an entertainment / self-assessment tool. It is <strong>not</strong> a
+          clinically validated psychometric instrument and should not be used for
+          diagnosis, employment, education, or any official decision.
+        </p>
+      </div>
+    </section>
+
+    <!-- TEST SCREEN -->
+    <section class="screen hidden" id="screen-test">
+      <div class="test-header">
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+          <span class="progress-label" id="progress-label">Question 1 / 30</span>
+        </div>
+        <div class="timer" id="timer">20:00</div>
+      </div>
+
+      <div class="card question-card">
+        <span class="category-tag" id="question-category">Logical</span>
+        <h2 class="question-text" id="question-text"></h2>
+        <div class="question-visual" id="question-visual"></div>
+
+        <div class="options" id="options"></div>
+      </div>
+
+      <div class="test-footer">
+        <button class="btn btn-ghost" id="btn-skip">Skip</button>
+        <button class="btn btn-primary" id="btn-next" disabled>Next</button>
+      </div>
+    </section>
+
+    <!-- RESULTS SCREEN -->
+    <section class="screen hidden" id="screen-results">
+      <div class="card results-card">
+        <p class="eyebrow">Your Result</p>
+
+        <div class="score-ring-wrap">
+          <svg class="score-ring" viewBox="0 0 200 200">
+            <circle class="ring-bg" cx="100" cy="100" r="88"></circle>
+            <circle class="ring-fill" id="ring-fill" cx="100" cy="100" r="88"></circle>
+          </svg>
+          <div class="score-center">
+            <span class="score-number" id="score-number">--</span>
+            <span class="score-caption">Estimated IQ</span>
+          </div>
+        </div>
+
+        <p class="percentile-text" id="percentile-text"></p>
+        <p class="band-text" id="band-text"></p>
+
+        <div class="breakdown" id="breakdown"></div>
+
+        <div class="stats-row">
+          <div class="stat">
+            <span class="stat-value" id="stat-correct">--</span>
+            <span class="stat-label">Correct</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="stat-time">--</span>
+            <span class="stat-label">Time Used</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="stat-skipped">--</span>
+            <span class="stat-label">Skipped</span>
+          </div>
+        </div>
+
+        <div class="results-actions">
+          <button class="btn btn-ghost" id="btn-copy">Copy Result</button>
+          <button class="btn btn-primary" id="btn-retake">Retake Test</button>
+        </div>
+
+        <p class="disclaimer">
+          Scores are derived from your performance relative to a modeled normal
+          distribution (mean 100, SD 15) and are for fun / self-reflection only —
+          not a substitute for a professional, standardized assessment.
+        </p>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="questions.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
