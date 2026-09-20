@@ -110,6 +110,14 @@ h2 { font-size: 22px; line-height: 1.4; margin: 0 0 20px; }
 .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
 .btn-ghost:not(:disabled):hover { background: var(--primary-soft); color: var(--text); }
 
+.btn-back {
+  padding: 8px 12px;
+  font-size: 20px;
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
 .disclaimer {
   font-size: 12px;
   line-height: 1.6;

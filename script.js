@@ -16,6 +16,7 @@
   const resultsScreen = document.getElementById("screen-results");
 
   const btnStart = document.getElementById("btn-start");
+  const btnBack = document.getElementById("btn-back");
   const btnNext = document.getElementById("btn-next");
   const btnSkip = document.getElementById("btn-skip");
   const btnRetake = document.getElementById("btn-retake");
@@ -350,7 +351,19 @@
     btnCopy.textContent = "Copy Result";
   }
 
+  function goBack() {
+    clearInterval(timerInterval);
+    introScreen.classList.remove("hidden");
+    testScreen.classList.add("hidden");
+    resultsScreen.classList.add("hidden");
+    currentIndex = 0;
+    answers = [];
+    selectedOption = null;
+    timeLeft = TOTAL_TIME;
+  }
+
   btnStart.addEventListener("click", startTest);
+  btnBack.addEventListener("click", goBack);
   btnNext.addEventListener("click", () => goNext(false));
   btnSkip.addEventListener("click", () => goNext(true));
 
