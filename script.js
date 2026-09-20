@@ -1,27 +1,25 @@
 (function () {
-  const TOTAL_TIME = 20 * 60; // 20 minutes, in seconds
-  const RING_CIRCUMFERENCE = 553; // 2 * pi * r(88), matches style.css stroke-dasharray
-
-  // Raw-score distribution assumptions used to map performance -> IQ.
-  // MEAN: expected weighted-correct fraction for an "average" test taker.
-  // SD: assumed spread of that fraction across the population.
+  // Configuration
+  const RING_CIRCUMFERENCE = 553;
   const ASSUMED_MEAN = 0.55;
   const ASSUMED_SD = 0.18;
-
   const DIFFICULTY_WEIGHT = { 1: 1, 2: 1.5, 3: 2 };
-  const CATEGORY_LABELS = { logical: "Logical", numerical: "Numerical", verbal: "Verbal", spatial: "Spatial" };
 
-  const introScreen = document.getElementById("screen-intro");
+  // Screen elements
+  const homeScreen = document.getElementById("screen-home");
+  const testInfoScreen = document.getElementById("screen-test-info");
   const testScreen = document.getElementById("screen-test");
   const resultsScreen = document.getElementById("screen-results");
 
-  const btnStart = document.getElementById("btn-start");
-  const btnBack = document.getElementById("btn-back");
-  const btnNext = document.getElementById("btn-next");
-  const btnSkip = document.getElementById("btn-skip");
-  const btnRetake = document.getElementById("btn-retake");
-  const btnCopy = document.getElementById("btn-copy");
+  // Home screen
+  const testsGrid = document.getElementById("tests-grid");
 
+  // Test Info screen
+  const btnBackInfo = document.getElementById("btn-back-info");
+  const btnStartTest = document.getElementById("btn-start-test");
+
+  // Test screen
+  const btnBackTest = document.getElementById("btn-back-test");
   const progressFill = document.getElementById("progress-fill");
   const progressLabel = document.getElementById("progress-label");
   const timerEl = document.getElementById("timer");
@@ -29,15 +27,25 @@
   const questionText = document.getElementById("question-text");
   const questionVisual = document.getElementById("question-visual");
   const optionsEl = document.getElementById("options");
+  const btnSkip = document.getElementById("btn-skip");
+  const btnNext = document.getElementById("btn-next");
 
+  // Results screen
+  const btnHome = document.getElementById("btn-home");
+  const btnCopy = document.getElementById("btn-copy");
+  const btnRetake = document.getElementById("btn-retake");
+
+  // State
+  let currentTest = null;
   let questions = [];
   let currentIndex = 0;
   let selectedOption = null;
   let answers = [];
-  let timeLeft = TOTAL_TIME;
+  let timeLeft = 0;
   let timerInterval = null;
   let lastResult = null;
 
+  // Utility functions
   function shuffle(arr) {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -51,7 +59,7 @@
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
-  // Abramowitz and Stegun approximation for error function (used in normalCDF)
+  // Error function approximation
   function erf(x) {
     const sign = x < 0 ? -1 : 1;
     x = Math.abs(x);
@@ -76,17 +84,57 @@
     return "Low";
   }
 
+  // Home screen functions
+  function renderHome() {
+    testsGrid.innerHTML = "";
+    getAllTests().forEach(test => {
+      const card = document.createElement("div");
+      card.className = "test-card";
+      card.style.borderTop = `4px solid ${test.color}`;
+      card.innerHTML = `
+        <div class="test-icon">${test.icon}</div>
+        <h3>${test.title}</h3>
+        <p>${test.description}</p>
+        <button class="btn btn-small" data-test-id="${test.id}">Take Test</button>
+      `;
+      card.querySelector("button").addEventListener("click", () => selectTest(test.id));
+      testsGrid.appendChild(card);
+    });
+  }
+
+  function selectTest(testId) {
+    currentTest = getTestById(testId);
+    showTestInfo();
+  }
+
+  // Test Info screen
+  function showTestInfo() {
+    if (!currentTest) return;
+
+    document.getElementById("info-eyebrow").textContent = "Test Assessment";
+    document.getElementById("info-title").textContent = currentTest.title;
+    document.getElementById("info-description").textContent = currentTest.description;
+    document.getElementById("info-questions").textContent = currentTest.numQuestions;
+    document.getElementById("info-duration").textContent = `${Math.ceil(currentTest.timeLimit / 60)} min`;
+    document.getElementById("info-categories").textContent = currentTest.categories.join(", ");
+    document.getElementById("info-disclaimer").textContent = currentTest.disclaimer;
+
+    homeScreen.classList.add("hidden");
+    testInfoScreen.classList.remove("hidden");
+  }
+
   function prepareQuestions() {
-    if (!QUESTION_BANK || QUESTION_BANK.length < 30) {
-      console.error("Question bank must have at least 30 questions");
-      alert("Error: Insufficient questions loaded. Please refresh the page.");
+    const questionsKey = currentTest.questionsKey;
+    const bank = window[questionsKey];
+
+    if (!bank || bank.length < currentTest.numQuestions) {
+      alert("Error: Insufficient questions loaded.");
       return false;
     }
 
-    const bank = shuffle(QUESTION_BANK);
-    questions = bank.map((q) => {
+    const shuffled = shuffle(bank).slice(0, currentTest.numQuestions);
+    questions = shuffled.map((q) => {
       if (!q.text || !q.options || q.options.length < 2 || q.answer === undefined) {
-        console.error("Invalid question:", q);
         return null;
       }
       const optionOrder = shuffle(q.options.map((_, idx) => idx));
@@ -102,31 +150,27 @@
       };
     }).filter(q => q !== null);
 
-    if (questions.length < 30) {
-      console.error("Not enough valid questions after validation");
-      alert("Error: Not enough valid questions. Please refresh the page.");
-      return false;
-    }
-    return true;
+    return questions.length >= currentTest.numQuestions;
   }
 
   function startTest() {
     if (!prepareQuestions()) {
       return;
     }
+
     currentIndex = 0;
     answers = [];
     selectedOption = null;
-    timeLeft = TOTAL_TIME;
+    timeLeft = currentTest.timeLimit;
 
-    introScreen.classList.add("hidden");
-    resultsScreen.classList.add("hidden");
+    testInfoScreen.classList.add("hidden");
     testScreen.classList.remove("hidden");
 
     renderQuestion();
     startTimer();
   }
 
+  // Timer functions
   function startTimer() {
     clearInterval(timerInterval);
     updateTimerDisplay();
@@ -148,12 +192,13 @@
     timerEl.classList.toggle("low", timeLeft <= 60);
   }
 
+  // Question rendering
   function renderQuestion() {
     selectedOption = null;
     btnNext.disabled = true;
     const q = questions[currentIndex];
 
-    categoryTag.textContent = CATEGORY_LABELS[q.category] || capitalize(q.category);
+    categoryTag.textContent = capitalize(q.category) || "Question";
     questionText.textContent = q.text;
 
     if (q.visual) {
@@ -177,7 +222,7 @@
       optionButtons.push(btn);
     });
 
-    // Keyboard navigation: arrow keys to move between options
+    // Keyboard navigation
     const handleOptionKeydown = (e) => {
       const currentBtn = e.target.closest(".option");
       if (!currentBtn) return;
@@ -210,7 +255,6 @@
     progressFill.parentElement.setAttribute("aria-valuemax", questions.length);
     btnNext.textContent = currentIndex === questions.length - 1 ? "Finish" : "Next";
 
-    // Focus first option for accessibility
     if (optionButtons.length > 0) {
       optionButtons[0].focus();
     }
@@ -260,6 +304,22 @@
     showResults();
   }
 
+  function goBack(fromInfo = false) {
+    clearInterval(timerInterval);
+    if (fromInfo) {
+      testInfoScreen.classList.add("hidden");
+    } else {
+      testScreen.classList.add("hidden");
+    }
+    homeScreen.classList.remove("hidden");
+    currentTest = null;
+    currentIndex = 0;
+    answers = [];
+    selectedOption = null;
+    timeLeft = 0;
+  }
+
+  // Results computation
   function computeResults() {
     let totalWeight = 0, earnedWeight = 0, correctCount = 0, skippedCount = 0;
     const catTotals = {}, catCorrect = {};
@@ -277,14 +337,23 @@
     });
 
     const rawPercent = totalWeight > 0 ? earnedWeight / totalWeight : 0;
+    let score, percentile, band;
 
-    let z = (rawPercent - ASSUMED_MEAN) / ASSUMED_SD;
-    z = Math.max(-3.2, Math.min(3.2, z));
-
-    let iq = Math.round(100 + 15 * z);
-    iq = Math.max(55, Math.min(160, iq));
-
-    const percentile = Math.round(normalCDF(z) * 1000) / 10;
+    if (currentTest.scoringType === "iq") {
+      let z = (rawPercent - ASSUMED_MEAN) / ASSUMED_SD;
+      z = Math.max(-3.2, Math.min(3.2, z));
+      score = Math.round(100 + 15 * z);
+      score = Math.max(55, Math.min(160, score));
+      percentile = Math.round(normalCDF(z) * 1000) / 10;
+      band = bandFor(score);
+    } else {
+      score = Math.round(rawPercent * 100);
+      percentile = Math.round(normalCDF((rawPercent - ASSUMED_MEAN) / ASSUMED_SD) * 1000) / 10;
+      if (score >= 80) band = "Excellent";
+      else if (score >= 60) band = "Good";
+      else if (score >= 40) band = "Average";
+      else band = "Needs Work";
+    }
 
     const categories = Object.keys(catTotals).map((cat) => ({
       category: cat,
@@ -294,12 +363,14 @@
     }));
 
     return {
-      iq,
+      score,
       percentile,
+      band,
       correctCount,
       skippedCount,
       totalQuestions: answers.length,
       categories,
+      testTitle: currentTest.title,
     };
   }
 
@@ -309,19 +380,25 @@
     resultsScreen.classList.remove("hidden");
 
     const scoreNumber = document.getElementById("score-number");
+    const scoreCaption = document.getElementById("score-caption");
     const ringFill = document.getElementById("ring-fill");
     const percentileText = document.getElementById("percentile-text");
     const bandText = document.getElementById("band-text");
     const breakdown = document.getElementById("breakdown");
+    const resultEyebrow = document.getElementById("result-eyebrow");
     const statCorrect = document.getElementById("stat-correct");
     const statTime = document.getElementById("stat-time");
     const statSkipped = document.getElementById("stat-skipped");
 
-    scoreNumber.textContent = r.iq;
-    percentileText.textContent = `Higher than ${r.percentile}% of the modeled population.`;
-    bandText.textContent = `Band: ${bandFor(r.iq)}`;
+    resultEyebrow.textContent = r.testTitle;
+    scoreNumber.textContent = r.score;
+    scoreCaption.textContent = currentTest.scoringType === "iq" ? "Estimated IQ" : "Score %";
+    percentileText.textContent = `Higher than ${r.percentile}% of participants.`;
+    bandText.textContent = `Band: ${r.band}`;
 
-    const pct = Math.max(0, Math.min(1, (r.iq - 55) / (160 - 55)));
+    const maxScore = currentTest.scoringType === "iq" ? 160 : 100;
+    const minScore = currentTest.scoringType === "iq" ? 55 : 0;
+    const pct = Math.max(0, Math.min(1, (r.score - minScore) / (maxScore - minScore)));
     const offset = RING_CIRCUMFERENCE * (1 - pct);
     ringFill.style.strokeDashoffset = String(RING_CIRCUMFERENCE);
     requestAnimationFrame(() => {
@@ -335,7 +412,7 @@
       const row = document.createElement("div");
       row.className = "breakdown-row";
       row.innerHTML = `
-        <span class="breakdown-label">${CATEGORY_LABELS[c.category] || capitalize(c.category)}</span>
+        <span class="breakdown-label">${capitalize(c.category)}</span>
         <span class="breakdown-bar-bg"><span class="breakdown-bar-fill" style="width:${c.pct}%"></span></span>
         <span class="breakdown-pct">${c.pct}%</span>
       `;
@@ -343,7 +420,7 @@
     });
 
     statCorrect.textContent = `${r.correctCount}/${r.totalQuestions}`;
-    const elapsed = TOTAL_TIME - timeLeft;
+    const elapsed = currentTest.timeLimit - timeLeft;
     const m = Math.floor(elapsed / 60), s = elapsed % 60;
     statTime.textContent = `${m}:${s.toString().padStart(2, "0")}`;
     statSkipped.textContent = String(r.skippedCount);
@@ -351,30 +428,15 @@
     btnCopy.textContent = "Copy Result";
   }
 
-  function goBack() {
-    clearInterval(timerInterval);
-    introScreen.classList.remove("hidden");
-    testScreen.classList.add("hidden");
-    resultsScreen.classList.add("hidden");
-    currentIndex = 0;
-    answers = [];
-    selectedOption = null;
-    timeLeft = TOTAL_TIME;
-  }
-
-  btnStart.addEventListener("click", startTest);
-  btnBack.addEventListener("click", goBack);
+  // Event listeners
+  btnBackInfo.addEventListener("click", () => goBack(true));
+  btnStartTest.addEventListener("click", startTest);
+  btnBackTest.addEventListener("click", () => goBack(false));
   btnNext.addEventListener("click", () => goNext(false));
   btnSkip.addEventListener("click", () => goNext(true));
-
-  // Keyboard shortcuts
-  document.addEventListener("keydown", (e) => {
-    if (testScreen.classList.contains("hidden")) return;
-
-    if (e.key === "Enter" && !btnNext.disabled) {
-      e.preventDefault();
-      btnNext.click();
-    }
+  btnHome.addEventListener("click", () => {
+    resultsScreen.classList.add("hidden");
+    homeScreen.classList.remove("hidden");
   });
 
   btnRetake.addEventListener("click", () => {
@@ -384,7 +446,7 @@
 
   btnCopy.addEventListener("click", () => {
     if (!lastResult) return;
-    const text = `I scored an estimated IQ of ${lastResult.iq} (${bandFor(lastResult.iq)}, ~${lastResult.percentile}th percentile) on this online IQ test.`;
+    const text = `I scored ${lastResult.score}${currentTest.scoringType === "iq" ? " IQ" : "%"} on the ${lastResult.testTitle} test (${lastResult.band}, ~${lastResult.percentile}th percentile).`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
         () => {
@@ -397,4 +459,16 @@
       window.prompt("Copy your result:", text);
     }
   });
+
+  // Keyboard shortcuts
+  document.addEventListener("keydown", (e) => {
+    if (testScreen.classList.contains("hidden")) return;
+    if (e.key === "Enter" && !btnNext.disabled) {
+      e.preventDefault();
+      btnNext.click();
+    }
+  });
+
+  // Initialize
+  renderHome();
 })();
