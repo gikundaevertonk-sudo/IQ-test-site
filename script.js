@@ -50,6 +50,7 @@
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
+  // Abramowitz and Stegun approximation for error function (used in normalCDF)
   function erf(x) {
     const sign = x < 0 ? -1 : 1;
     x = Math.abs(x);
@@ -75,8 +76,18 @@
   }
 
   function prepareQuestions() {
+    if (!QUESTION_BANK || QUESTION_BANK.length < 30) {
+      console.error("Question bank must have at least 30 questions");
+      alert("Error: Insufficient questions loaded. Please refresh the page.");
+      return false;
+    }
+
     const bank = shuffle(QUESTION_BANK);
     questions = bank.map((q) => {
+      if (!q.text || !q.options || q.options.length < 2 || q.answer === undefined) {
+        console.error("Invalid question:", q);
+        return null;
+      }
       const optionOrder = shuffle(q.options.map((_, idx) => idx));
       const options = optionOrder.map((idx) => q.options[idx]);
       const answerIndex = optionOrder.indexOf(q.answer);
@@ -88,11 +99,20 @@
         options,
         answerIndex,
       };
-    });
+    }).filter(q => q !== null);
+
+    if (questions.length < 30) {
+      console.error("Not enough valid questions after validation");
+      alert("Error: Not enough valid questions. Please refresh the page.");
+      return false;
+    }
+    return true;
   }
 
   function startTest() {
-    prepareQuestions();
+    if (!prepareQuestions()) {
+      return;
+    }
     currentIndex = 0;
     answers = [];
     selectedOption = null;
@@ -144,24 +164,63 @@
     }
 
     optionsEl.innerHTML = "";
+    const optionButtons = [];
     q.options.forEach((opt, idx) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "option";
       btn.textContent = opt;
+      btn.setAttribute("data-option-idx", idx);
       btn.addEventListener("click", () => selectOption(idx, btn));
       optionsEl.appendChild(btn);
+      optionButtons.push(btn);
+    });
+
+    // Keyboard navigation: arrow keys to move between options
+    const handleOptionKeydown = (e) => {
+      const currentBtn = e.target.closest(".option");
+      if (!currentBtn) return;
+
+      const idx = optionButtons.indexOf(currentBtn);
+      let nextIdx = idx;
+
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        e.preventDefault();
+        nextIdx = (idx + 1) % optionButtons.length;
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        nextIdx = (idx - 1 + optionButtons.length) % optionButtons.length;
+      } else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        selectOption(idx, currentBtn);
+        return;
+      }
+
+      optionButtons[nextIdx].focus();
+    };
+
+    optionButtons.forEach((btn) => {
+      btn.addEventListener("keydown", handleOptionKeydown);
     });
 
     progressFill.style.width = `${(currentIndex / questions.length) * 100}%`;
     progressLabel.textContent = `Question ${currentIndex + 1} / ${questions.length}`;
+    progressFill.parentElement.setAttribute("aria-valuenow", currentIndex);
+    progressFill.parentElement.setAttribute("aria-valuemax", questions.length);
     btnNext.textContent = currentIndex === questions.length - 1 ? "Finish" : "Next";
+
+    // Focus first option for accessibility
+    if (optionButtons.length > 0) {
+      optionButtons[0].focus();
+    }
   }
 
   function selectOption(idx, btnEl) {
     selectedOption = idx;
-    optionsEl.querySelectorAll(".option").forEach((el) => el.classList.remove("selected"));
+    const allOptions = optionsEl.querySelectorAll(".option");
+    allOptions.forEach((el) => el.classList.remove("selected"));
     btnEl.classList.add("selected");
+    btnEl.focus();
     btnNext.disabled = false;
   }
 
@@ -294,6 +353,16 @@
   btnStart.addEventListener("click", startTest);
   btnNext.addEventListener("click", () => goNext(false));
   btnSkip.addEventListener("click", () => goNext(true));
+
+  // Keyboard shortcuts
+  document.addEventListener("keydown", (e) => {
+    if (testScreen.classList.contains("hidden")) return;
+
+    if (e.key === "Enter" && !btnNext.disabled) {
+      e.preventDefault();
+      btnNext.click();
+    }
+  });
 
   btnRetake.addEventListener("click", () => {
     resultsScreen.classList.add("hidden");

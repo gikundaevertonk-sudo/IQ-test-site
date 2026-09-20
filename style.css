@@ -95,10 +95,14 @@ h2 { font-size: 22px; line-height: 1.4; margin: 0 0 20px; }
   padding: 14px 24px;
   border: none;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease, opacity 0.15s ease, outline 0.15s ease;
 }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
 
 .btn-primary { background: var(--primary); color: #fff; width: 100%; }
 .btn-primary:not(:disabled):hover { background: var(--primary-hover); }
@@ -197,9 +201,13 @@ h2 { font-size: 22px; line-height: 1.4; margin: 0 0 20px; }
   color: var(--text);
   font-size: 15px;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, outline 0.15s ease;
 }
 .option:hover { border-color: var(--primary); }
+.option:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -1.5px;
+}
 .option.selected { border-color: var(--primary); background: var(--primary-soft); font-weight: 600; }
 
 .test-footer {
