@@ -158,7 +158,7 @@
   }
 
   function initTheme() {
-    applyTheme(store.get(KEY_THEME) === "light" ? "light" : "dark");
+    applyTheme(store.get(KEY_THEME) === "dark" ? "dark" : "light");
   }
 
   // ---------- History ----------
@@ -204,6 +204,8 @@
       card.appendChild(el("div", "test-icon", test.icon));
       card.appendChild(el("h3", "", test.title));
       card.appendChild(el("p", "", test.description));
+      card.appendChild(el("p", "test-meta",
+        `${test.numQuestions} questions · ${Math.ceil(test.timeLimit / 60)} min`));
 
       const history = testHistory(test.id);
       if (history.length) {
@@ -212,7 +214,7 @@
           `Best: ${scoreLabel(test, best)} · ${history.length} attempt${history.length === 1 ? "" : "s"}`));
       }
 
-      const btn = el("button", "btn btn-small", "Take Test");
+      const btn = el("button", "btn btn-small", "Start assessment");
       btn.type = "button";
       btn.addEventListener("click", () => selectTest(test.id));
       card.appendChild(btn);

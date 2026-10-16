@@ -13,7 +13,7 @@ const TESTS = {
     title: "Intelligence (IQ)",
     description: "Measure your general cognitive ability through logic, numerical reasoning, verbal comprehension, and spatial visualization.",
     icon: "🧠",
-    color: "#4f46e5",
+    color: "#a84d37",
     numQuestions: 30,
     timeLimit: 1200, // 20 minutes
     categories: ["Logical", "Numerical", "Verbal", "Spatial"],
@@ -27,7 +27,7 @@ const TESTS = {
     title: "Memory",
     description: "Study short items for a few seconds, then recall them after they disappear. Covers short-term, working, and visual memory.",
     icon: "💾",
-    color: "#7c3aed",
+    color: "#796b58",
     numQuestions: 15,
     timeLimit: 480, // 8 minutes
     categories: ["Short-term", "Working", "Visual"],
@@ -40,7 +40,7 @@ const TESTS = {
     title: "Critical Thinking",
     description: "Evaluate your ability to analyze information, identify assumptions, and make logical conclusions.",
     icon: "🔍",
-    color: "#db2777",
+    color: "#9a5945",
     numQuestions: 20,
     timeLimit: 900, // 15 minutes
     categories: ["Analysis", "Inference", "Evaluation"],
@@ -53,7 +53,7 @@ const TESTS = {
     title: "Learning Ability",
     description: "Learn a new rule from a few examples, then apply it. Measures how quickly you pick up unfamiliar patterns.",
     icon: "📚",
-    color: "#059669",
+    color: "#687b5e",
     numQuestions: 20,
     timeLimit: 720, // 12 minutes
     categories: ["Pattern Recognition", "Adaptation", "Application"],
@@ -66,7 +66,7 @@ const TESTS = {
     title: "Creativity",
     description: "Word-association puzzles plus originality-graded questions on divergent thinking and flexible problem framing.",
     icon: "🎨",
-    color: "#d97706",
+    color: "#b67b3f",
     numQuestions: 15,
     timeLimit: 600, // 10 minutes
     categories: ["Divergent Thinking", "Originality", "Flexibility"],
@@ -79,7 +79,7 @@ const TESTS = {
     title: "Problem-Solving Ability",
     description: "Work through concrete puzzles and diagnosis problems: find the real problem, generate a workable solution, and check it.",
     icon: "🧩",
-    color: "#0891b2",
+    color: "#5d7780",
     numQuestions: 18,
     timeLimit: 840, // 14 minutes
     categories: ["Problem Identification", "Solution Generation", "Evaluation"],
@@ -92,7 +92,7 @@ const TESTS = {
     title: "Attention and Focus",
     description: "Count, scan, and filter carefully. Both accuracy and how quickly you answer count towards your score.",
     icon: "👁️",
-    color: "#f59e0b",
+    color: "#a6813e",
     numQuestions: 20,
     timeLimit: 600, // 10 minutes
     categories: ["Sustained Attention", "Selective Attention", "Divided Attention"],
@@ -106,7 +106,7 @@ const TESTS = {
     title: "Emotional Intelligence",
     description: "Respond to realistic scenarios. Options earn full or partial credit depending on how well they read and manage the emotions involved.",
     icon: "❤️",
-    color: "#ec4899",
+    color: "#ad5d5a",
     numQuestions: 20,
     timeLimit: 840, // 14 minutes
     categories: ["Self-Awareness", "Empathy", "Relationship Management"],
@@ -119,7 +119,7 @@ const TESTS = {
     title: "Decision-Making",
     description: "Expected-value problems, common decision traps, and judgment scenarios with incomplete information.",
     icon: "⚖️",
-    color: "#6366f1",
+    color: "#82745e",
     numQuestions: 20,
     timeLimit: 780, // 13 minutes
     categories: ["Risk Assessment", "Logic", "Judgment"],
@@ -132,7 +132,7 @@ const TESTS = {
     title: "Processing Speed",
     description: "Rapid comparisons and quick arithmetic. Every answer is timed, and faster correct answers score higher.",
     icon: "⚡",
-    color: "#14b8a6",
+    color: "#5f8074",
     numQuestions: 30,
     timeLimit: 300, // 5 minutes
     categories: ["Perceptual Speed", "Quick Decisions", "Rapid Processing"],

@@ -44,7 +44,7 @@ Each run draws a random, category-balanced set from a larger bank (at least 1.5x
 - Progress is saved in `localStorage`. After a refresh, or after leaving via the back button, **Resume** on the home screen restores the test. The clock keeps running while you are away.
 - The results screen has a **Review your answers** section showing what you chose and the correct answer.
 - Your last scores for each test are kept in this browser and shown on the test's start screen. Use **Clear history** to remove them.
-- A toggle in the top-right corner switches between dark (default) and light themes.
+- A toggle switches between a warm parchment light theme (default) and a deep ember dark theme.
 
 ## Project layout
 
