@@ -158,7 +158,10 @@
   }
 
   function initTheme() {
-    applyTheme(store.get(KEY_THEME) === "dark" ? "dark" : "light");
+    const savedTheme = store.get(KEY_THEME);
+    const theme = savedTheme === "dark" ? "dark" : "light";
+    if (!savedTheme) store.set(KEY_THEME, theme);
+    applyTheme(theme);
   }
 
   // ---------- History ----------
@@ -201,7 +204,9 @@
       const card = el("div", "test-card");
       card.style.setProperty("--accent", test.color);
       card.style.animationDelay = `${testsGrid.children.length * 50}ms`;
-      card.appendChild(el("div", "test-icon", test.icon));
+      const iconWrap = el("div", "test-icon");
+      iconWrap.innerHTML = test.icon;
+      card.appendChild(iconWrap);
       card.appendChild(el("h3", "", test.title));
       card.appendChild(el("p", "", test.description));
       card.appendChild(el("p", "test-meta",
