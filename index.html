@@ -8,7 +8,7 @@
 <script>
   // Apply the saved theme before first paint to avoid a flash of the wrong theme.
   try {
-    const savedTheme = localStorage.getItem("itp.theme");
+    const savedTheme = localStorage.getItem("itp.theme.v2");
     if (savedTheme === "light" || savedTheme === "dark") {
       document.documentElement.setAttribute("data-theme", savedTheme);
     }

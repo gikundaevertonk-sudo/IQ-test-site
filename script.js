@@ -8,7 +8,7 @@
   const HISTORY_SHOWN = 5;
   const KEY_PROGRESS = "itp.progress.v1";
   const KEY_HISTORY = "itp.history.v1";
-  const KEY_THEME = "itp.theme";
+  const KEY_THEME = "itp.theme.v2";
 
   // Screen elements
   const homeScreen = document.getElementById("screen-home");
