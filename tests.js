@@ -6,7 +6,8 @@
 // Optional per-test settings:
 //   norm            { mean, sd } assumed score distribution; only tests with one show a percentile estimate
 //   speed           { targetSeconds, weight } scores response time as well as accuracy
-//   allowNavigation false for tests that must be answered in order (Previous / question map hidden)
+//   allowNavigation false hides the question map for tests meant to be taken in order
+//                   (Previous is always available)
 const TESTS = {
   "iq": {
     id: "iq",
@@ -18,7 +19,8 @@ const TESTS = {
     timeLimit: 1200, // 20 minutes
     categories: ["Logical", "Numerical", "Verbal", "Spatial"],
     scoringType: "iq",
-    norm: { mean: 0.55, sd: 0.18 },
+    // sd = (1 - mean) / 4, so 100% correct maps to IQ 160 and the average (55%) to 100.
+    norm: { mean: 0.55, sd: 0.1125 },
     allowNavigation: true,
     disclaimer: "This is a self-assessment tool, not a clinical IQ test. The IQ figure is an estimate that assumes a made-up score distribution."
   },
@@ -66,7 +68,7 @@ const TESTS = {
     title: "Creativity",
     description: "Word-association puzzles plus originality-graded questions on divergent thinking and flexible problem framing.",
     icon: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 12c2.5 12.5 5.5 15.5 18 18-12.5 2.5-15.5 5.5-18 18-2.5-12.5-5.5-15.5-18-18 12.5-2.5 15.5-5.5 18-18Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M49 10v10m-5-5h10" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg>',
-    color: "#b67b3f",
+    color: "#9a6535",
     numQuestions: 15,
     timeLimit: 600, // 10 minutes
     categories: ["Divergent Thinking", "Originality", "Flexibility"],
@@ -92,7 +94,7 @@ const TESTS = {
     title: "Attention and Focus",
     description: "Count, scan, and filter carefully. Both accuracy and how quickly you answer count towards your score.",
     icon: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 32c4-9 11-14 18-14s14 5 18 14c-4 9-11 14-18 14s-14-5-18-14Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><circle cx="32" cy="32" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>',
-    color: "#a6813e",
+    color: "#94652f",
     numQuestions: 20,
     timeLimit: 600, // 10 minutes
     categories: ["Sustained Attention", "Selective Attention", "Divided Attention"],
@@ -132,7 +134,7 @@ const TESTS = {
     title: "Processing Speed",
     description: "Rapid comparisons and quick arithmetic. Every answer is timed, and faster correct answers score higher.",
     icon: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M34 12 18 34h10l-4 18 18-24h-9l4-16Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    color: "#5f8074",
+    color: "#577568",
     numQuestions: 30,
     timeLimit: 300, // 5 minutes
     categories: ["Perceptual Speed", "Quick Decisions", "Rapid Processing"],

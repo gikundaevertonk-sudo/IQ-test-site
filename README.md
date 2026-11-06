@@ -34,15 +34,20 @@ Each run draws a random, category-balanced set from a larger bank (at least 1.5x
 - Questions are weighted by difficulty (1, 1.5 or 2).
 - **Scenario items** (Emotional Intelligence, Decision-Making judgment, Creativity) give full credit for the best option and partial credit for defensible ones.
 - **Speed tests** (Attention, Processing Speed) award 60% of an item's points for a correct answer and up to 40% for answering within a target time, which grows with difficulty.
-- **Only the IQ test shows a percentile**, and it is an estimate that assumes scores follow a normal distribution with an invented mean and spread (`norm` in `tests.js`). There is no participant data behind it. The other tests report a percentage score only.
+- **Only the IQ test shows a percentile**, and it is an estimate that assumes scores follow a normal distribution with an invented mean and spread (`norm` in `tests.js`). There is no participant data behind it. The other tests report a percentage score only. The spread is set so that a perfect run reaches 160 and the assumed average (55% of the weighted points) is 100; each question moves the estimate by roughly 4 to 5 points.
 
 ### Taking a test
 
-- Tests with free navigation (IQ, Critical Thinking, Learning, Creativity, Problem-Solving, Emotional Intelligence, Decision-Making) have a **Previous** button and a question map for jumping to skipped questions. Finishing with unanswered questions asks for confirmation.
-- Memory, Attention and Processing Speed run forward only, since items are timed or shown once.
-- Enter or Space on an option selects it; press **Next** to continue.
+- There is no Next button: picking an answer (click, tap, or Enter/Space) moves to the next question after a short pause, and tapping a different option during the pause changes the answer. The pause is not counted in speed scoring.
+- **Previous** works on every test, so you can go back and change an answer; tap any option there to move on again. **Skip** leaves an unanswered question blank and keeps an answer you already gave.
+- IQ, Critical Thinking, Learning, Creativity, Problem-Solving, Emotional Intelligence and Decision-Making also show a question map: filled chips are answered, dashed ones were seen and skipped, plain ones are not reached yet. On phones the map is a single row you can swipe. Memory items are still shown only once, even if you go back.
+- The last question never ends the test by itself: **Finish test** lights up once it's answered. Finishing with unanswered questions asks for confirmation.
+- The browser's (or phone's) **Back** button moves between screens: from a test's intro back to home, from results back to the intro. Pressing Back during a test asks before leaving, like the on-screen arrow.
 - Progress is saved in `localStorage`. After a refresh, or after leaving via the back button, **Resume** on the home screen restores the test. The clock keeps running while you are away.
 - The results screen has a **Review your answers** section showing what you chose and the correct answer.
+- **Share link** creates a link to a read-only copy of the result, using the phone's share sheet where available and copying the link otherwise. The result is packed into the URL hash (`#r=...`), so it works on any static host and no server sees it. Anyone can edit a link, so shared scores are self-reported. The link carries the score, category breakdown and stats, but not the answers, so the review section isn't included.
+- **Save image** draws a 1080x1350 result card (in the current theme) with the site address at the bottom. It downloads as a PNG; on phones it opens the share sheet so it can go straight to the photo gallery.
+- The **Pass it on** tab on the right edge shares the plain site link. It hides during a test.
 - Your last scores for each test are kept in this browser and shown on the test's start screen. Use **Clear history** to remove them.
 - A toggle switches between a warm parchment light theme (default) and a deep ember dark theme.
 

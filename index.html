@@ -5,6 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#f2ecdf" />
 <title>Intelligence Test Platform</title>
+<meta name="description" content="Ten quick self-assessments spanning memory, reasoning, creativity, focus, and more. Free, no sign-up, nothing leaves your browser." />
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="icon" href="icons/phoenix-192.png" type="image/png" sizes="192x192" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<!-- Link previews (WhatsApp, Slack, X, etc.). Scrapers need absolute URLs. -->
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://testsite-ecru.vercel.app/" />
+<meta property="og:image" content="https://testsite-ecru.vercel.app/phoenix-background.png" />
+<meta property="og:image:width" content="1213" />
+<meta property="og:image:height" content="682" />
+<meta property="og:image:alt" content="A red and gold phoenix rising in front of a sun" />
+<meta property="og:site_name" content="Intelligence Test Platform" />
+<meta property="og:title" content="A little curiosity can reveal a lot." />
+<meta property="og:description" content="Ten quick self-assessments spanning memory, reasoning, creativity, focus, and more." />
+<meta name="twitter:card" content="summary_large_image" />
 <script>
   // Apply the saved theme before first paint to avoid a flash of the wrong theme.
   try {
@@ -16,10 +31,21 @@
 </script>
 <link rel="stylesheet" href="style.css" />
 </head>
-<body>
-  <button class="btn btn-ghost theme-toggle" id="theme-toggle" type="button" aria-label="Switch theme">☀️</button>
+<body data-screen="screen-home">
+  <button class="btn btn-ghost theme-toggle" id="theme-toggle" type="button" aria-label="Switch theme">
+    <svg class="icon icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+    <svg class="icon icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6Z"/><path class="icon-twinkle" d="M17 3.5v3M15.5 5h3"/></svg>
+  </button>
 
-  <div class="app" id="app">
+  <!-- Edge tab: a paper plane that slides out to "Pass it on" and takes off when clicked. -->
+  <button class="share-tab" id="btn-share-site" type="button" aria-label="Share this site with someone">
+    <span class="plane-track" aria-hidden="true">
+      <svg class="icon plane" viewBox="0 0 24 24"><path d="M21 3 3 10.5l7 2.5 2.5 7L21 3Z"/><path d="m10 13 4.5-4.5"/></svg>
+    </span>
+    <span class="share-tab-label" id="btn-share-site-label">Pass it on</span>
+  </button>
+
+  <main class="app" id="app">
 
     <!-- HOME SCREEN -->
     <section class="screen" id="screen-home">
@@ -53,7 +79,7 @@
     <!-- TEST INFO SCREEN (Before starting test) -->
     <section class="screen hidden" id="screen-test-info">
       <div class="card info-card">
-        <button class="btn btn-ghost btn-back" id="btn-back-info" aria-label="Go back to home">←</button>
+        <button class="btn btn-ghost btn-back" id="btn-back-info" aria-label="Go back to home"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg></button>
         <p class="eyebrow" id="info-eyebrow">Assessment</p>
         <h1 id="info-title">Test Title</h1>
         <p class="lede" id="info-description">Test description</p>
@@ -88,7 +114,7 @@
     <!-- TEST SCREEN -->
     <section class="screen hidden" id="screen-test">
       <div class="test-header">
-        <button class="btn btn-ghost btn-back" id="btn-back-test" aria-label="Leave the test">←</button>
+        <button class="btn btn-ghost btn-back" id="btn-back-test" aria-label="Leave the test"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg></button>
         <div class="progress-wrap">
           <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuemin="1" aria-valuenow="1" aria-valuemax="1">
             <div class="progress-fill" id="progress-fill"></div>
@@ -112,14 +138,15 @@
         <button class="btn btn-ghost" id="btn-prev" type="button" aria-label="Go to the previous question">Previous</button>
         <button class="btn btn-ghost" id="btn-skip" type="button" aria-label="Skip this question">Skip</button>
         <button class="btn btn-ghost" id="btn-finish" type="button" aria-label="Finish the test now">Finish test</button>
-        <button class="btn btn-primary" id="btn-next" type="button" disabled aria-label="Go to next question">Next</button>
       </div>
     </section>
 
     <!-- RESULTS SCREEN -->
     <section class="screen hidden" id="screen-results">
       <div class="card results-card">
-        <button class="btn btn-ghost btn-home" id="btn-home" aria-label="Go home">🏠</button>
+        <button class="btn btn-ghost btn-home" id="btn-home" aria-label="Go home" title="Home">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/></svg>
+        </button>
 
         <p class="eyebrow" id="result-eyebrow">Your Result</p>
 
@@ -168,9 +195,19 @@
           <ol class="review-list" id="review-list"></ol>
         </details>
 
+        <div class="share-row">
+          <button class="btn btn-ghost btn-share-action" id="btn-share" type="button">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg>
+            <span id="btn-share-label">Share link</span>
+          </button>
+          <button class="btn btn-ghost btn-share-action" id="btn-save-image" type="button">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 16-4.5-4.5-8.5 8"/></svg>
+            <span id="btn-save-label">Save image</span>
+          </button>
+        </div>
+
         <div class="results-actions">
-          <button class="btn btn-ghost" id="btn-copy">Copy Result</button>
-          <button class="btn btn-primary" id="btn-retake">Retake Test</button>
+          <button class="btn btn-primary" id="btn-retake" type="button">Retake Test</button>
         </div>
 
         <p class="disclaimer disclaimer-small">
@@ -179,7 +216,21 @@
       </div>
     </section>
 
-  </div>
+  </main>
+
+  <!-- Read out by screen readers when the question changes (auto-advance has no visible cue for them). -->
+  <p class="sr-only" id="sr-announcer" aria-live="polite" aria-atomic="true"></p>
+
+  <!-- In-page confirm (window.confirm is blocked or auto-cancelled in some browsers) -->
+  <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-message">
+    <form method="dialog">
+      <p class="confirm-message" id="confirm-message"></p>
+      <div class="confirm-actions">
+        <button class="btn btn-ghost" id="confirm-cancel" value="cancel" type="submit">Cancel</button>
+        <button class="btn btn-primary" id="confirm-ok" value="ok" type="submit">OK</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="tests.js"></script>
   <script src="questions.js"></script>

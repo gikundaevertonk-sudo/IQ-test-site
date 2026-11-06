@@ -4,11 +4,13 @@
   const DIFFICULTY_WEIGHT = { 1: 1, 2: 1.5, 3: 2 };
   // Speed-scored tests allow proportionally more time for harder questions.
   const SPEED_TARGET_FACTOR = { 1: 1, 2: 1.5, 3: 2 };
+  const AUTO_ADVANCE_MS = 450; // pause after picking an answer before moving on
   const MAX_HISTORY = 20;
   const HISTORY_SHOWN = 5;
   const KEY_PROGRESS = "itp.progress.v1";
   const KEY_HISTORY = "itp.history.v1";
   const KEY_THEME = "itp.theme.v2";
+  const KEY_TAB_SEEN = "itp.sharetab.v1";
 
   // Screen elements
   const homeScreen = document.getElementById("screen-home");
@@ -45,12 +47,26 @@
   const btnPrev = document.getElementById("btn-prev");
   const btnSkip = document.getElementById("btn-skip");
   const btnFinish = document.getElementById("btn-finish");
-  const btnNext = document.getElementById("btn-next");
 
   // Results screen
   const btnHome = document.getElementById("btn-home");
-  const btnCopy = document.getElementById("btn-copy");
+  const btnShare = document.getElementById("btn-share");
+  const btnShareLabel = document.getElementById("btn-share-label");
+  const btnSaveImage = document.getElementById("btn-save-image");
+  const btnSaveLabel = document.getElementById("btn-save-label");
   const btnRetake = document.getElementById("btn-retake");
+  const btnShareSite = document.getElementById("btn-share-site");
+  const btnShareSiteLabel = document.getElementById("btn-share-site-label");
+  const srAnnouncer = document.getElementById("sr-announcer");
+
+  const oneLine = (text) => text.replace(/\s*\n\s*/g, ", ");
+
+  // Screen readers: say what changed. Cleared first so repeating the same text is still read.
+  function announce(text) {
+    if (!srAnnouncer) return;
+    srAnnouncer.textContent = "";
+    setTimeout(() => (srAnnouncer.textContent = text), 60);
+  }
 
   // State
   let currentTest = null;
@@ -65,8 +81,12 @@
   let questionShownAt = 0; // 0 while nothing is being timed (e.g. during a study phase)
   let timerInterval = null;
   let studyInterval = null;
+  let autoAdvanceTimer = null;
   let testActive = false;
   let lastResult = null;
+  let lastResultTest = null;
+  let lastShareUrl = "";
+  let viewingShared = false; // results screen is showing someone else's shared link
 
   // ---------- Utilities ----------
   const store = {
@@ -143,17 +163,258 @@
     return "Low";
   }
 
-  function showScreen(screen) {
+  function percentBand(score) {
+    if (score >= 80) return "Excellent";
+    if (score >= 60) return "Good";
+    if (score >= 40) return "Average";
+    return "Needs Work";
+  }
+
+  // ---------- Shareable result links ----------
+  // A result is packed into the URL hash (#r=...), so links work on any static host
+  // and nothing is sent to a server. Anyone can edit a link, so shared results are
+  // self-reported: decoding validates ranges and re-derives the band from the score.
+  function siteUrl() {
+    return window.location.origin + window.location.pathname;
+  }
+
+  function toBase64Url(str) {
+    return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function fromBase64Url(str) {
+    const b64 = str.replace(/-/g, "+").replace(/_/g, "/");
+    return atob(b64 + "===".slice((b64.length + 3) % 4));
+  }
+
+  function encodeResult(test, r) {
+    const pctByCat = {};
+    r.categories.forEach((c) => (pctByCat[c.category] = c.pct));
+    const payload = {
+      v: 1,
+      t: test.id,
+      s: r.score,
+      c: r.correctCount,
+      n: r.totalQuestions,
+      k: r.skippedCount,
+      e: r.elapsedSeconds,
+      g: test.categories.map((cat) => (cat in pctByCat ? pctByCat[cat] : -1)),
+      d: Math.floor(Date.now() / 1000),
+    };
+    if (r.percentile !== null) payload.p = r.percentile;
+    if (test.speed) {
+      payload.a = r.accuracyPct;
+      if (r.speedPct !== null) payload.sp = r.speedPct;
+      if (r.avgSeconds !== null) payload.av = Math.round(r.avgSeconds * 10);
+    }
+    return toBase64Url(JSON.stringify(payload));
+  }
+
+  function intIn(value, min, max) {
+    return Number.isInteger(value) && value >= min && value <= max;
+  }
+
+  // Returns { test, result, takenAt } or null if the link is malformed.
+  function decodeResult(code) {
+    let p;
+    try {
+      p = JSON.parse(fromBase64Url(code));
+    } catch (e) {
+      return null;
+    }
+    if (!p || typeof p !== "object" || p.v !== 1 || typeof p.t !== "string") return null;
+    const test = getTestById(p.t);
+    if (!test) return null;
+    const isIq = test.scoringType === "iq";
+    if (!intIn(p.s, isIq ? 55 : 0, isIq ? 160 : 100)) return null;
+    if (!intIn(p.n, 1, 500) || !intIn(p.c, 0, p.n) || !intIn(p.k, 0, p.n) || !intIn(p.e, 0, 86400)) return null;
+    if (!Array.isArray(p.g) || p.g.length !== test.categories.length || !p.g.every((x) => intIn(x, -1, 100))) return null;
+
+    const result = {
+      score: p.s,
+      percentile: isIq && intIn(p.p, 1, 99) ? p.p : null,
+      band: isIq ? bandFor(p.s) : percentBand(p.s),
+      correctCount: p.c,
+      skippedCount: p.k,
+      totalQuestions: p.n,
+      categories: test.categories
+        .map((cat, i) => ({ category: cat, pct: p.g[i] }))
+        .filter((c) => c.pct >= 0),
+      testTitle: test.title,
+      elapsedSeconds: p.e,
+    };
+    if (test.speed) {
+      result.accuracyPct = intIn(p.a, 0, 100) ? p.a : null;
+      result.speedPct = intIn(p.sp, 0, 100) ? p.sp : null;
+      result.avgSeconds = intIn(p.av, 0, 36000) ? p.av / 10 : null;
+    }
+    const takenAt = Number.isInteger(p.d) && p.d > 0 ? new Date(p.d * 1000) : null;
+    return { test, result, takenAt };
+  }
+
+  function sharedCodeFromHash() {
+    const m = window.location.hash.match(/^#r=([A-Za-z0-9_-]+)$/);
+    return m ? m[1] : null;
+  }
+
+  function clearShareHash() {
+    if (window.location.hash) {
+      history.replaceState(history.state, "", siteUrl() + window.location.search);
+    }
+  }
+
+  // Uses the native share sheet where available (mostly phones), otherwise copies.
+  // labelEl is the element whose text briefly confirms the copy.
+  function shareOrCopy(labelEl, idleLabel, data, onCopied) {
+    const copyText = data.text ? `${data.text} ${data.url}` : data.url;
+    const flash = (label) => {
+      labelEl.textContent = label;
+      if (onCopied) onCopied();
+      setTimeout(() => (labelEl.textContent = idleLabel), 1800);
+    };
+    const copy = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(copyText).then(
+          () => flash("Link copied!"),
+          () => window.prompt("Copy this link:", copyText)
+        );
+      } else {
+        window.prompt("Copy this link:", copyText);
+      }
+    };
+    if (navigator.share) {
+      navigator.share(data).catch((err) => {
+        // AbortError means the person closed the share sheet; nothing to do.
+        if (!err || err.name !== "AbortError") copy();
+      });
+    } else {
+      copy();
+    }
+  }
+
+  // mode: "push" adds a browser history step (so the phone/browser Back button
+  // returns to the previous screen), "replace" swaps the current step.
+  function showScreen(screen, mode = "push") {
     [homeScreen, testInfoScreen, testScreen, resultsScreen].forEach((s) => {
       s.classList.toggle("hidden", s !== screen);
     });
-    window.scrollTo(0, 0);
+    document.body.dataset.screen = screen.id;
+    window.scrollTo({ top: 0, behavior: "instant" });
+    recordScreen(screen, mode);
+  }
+
+  // ---------- Browser history (Back / Forward buttons) ----------
+  let restoringHistory = false; // true while redrawing a screen the browser went back to
+  let ownResult = null;         // the visitor's latest own result, to show again on Back/Forward
+
+  function screenState(screen) {
+    const names = new Map([[homeScreen, "home"], [testInfoScreen, "info"], [testScreen, "test"], [resultsScreen, "results"]]);
+    const state = { screen: names.get(screen) };
+    if (currentTest && state.screen !== "home") state.testId = currentTest.id;
+    if (state.screen === "results" && viewingShared) {
+      state.screen = "shared";
+      state.code = sharedCodeFromHash();
+    }
+    return state;
+  }
+
+  function recordScreen(screen, mode) {
+    if (restoringHistory) return;
+    const state = screenState(screen);
+    const cur = history.state;
+    const same = cur && cur.screen === state.screen && cur.testId === state.testId;
+    try {
+      if (mode === "replace" || same) history.replaceState(state, "", window.location.href);
+      else history.pushState(state, "", window.location.href);
+    } catch (e) { /* history unavailable (e.g. some embedded views): screens still work */ }
+  }
+
+  function restoreFromHistory(state) {
+    restoringHistory = true;
+    try {
+      const test = state.testId ? getTestById(state.testId) : null;
+      if (state.screen === "info" && test) {
+        currentTest = test;
+        showTestInfo();
+      } else if (state.screen === "test") {
+        const saved = loadProgress();
+        if (saved && saved.test.id === state.testId) resumeTest();
+        else goHome();
+      } else if (state.screen === "results" && ownResult && ownResult.test.id === state.testId) {
+        showOwnResultAgain();
+      } else if (state.screen === "shared" && state.code && showSharedResult(state.code)) {
+        // shown
+      } else {
+        goHome();
+      }
+    } finally {
+      restoringHistory = false;
+    }
+  }
+
+  window.addEventListener("popstate", (e) => {
+    const state = e.state;
+    if (!state || !state.screen) return; // a pasted #r= link: handled by hashchange
+    if (testActive) {
+      // Back during a test: stay on the test and ask first, like the on-screen arrow.
+      try { history.pushState(screenState(testScreen), "", siteUrl() + window.location.search); } catch (err) { /* ignore */ }
+      goBackFromTest({ viaHistory: true });
+      return;
+    }
+    restoreFromHistory(state);
+  });
+
+  // ---------- Confirm dialog ----------
+  // In-page replacement for window.confirm, which some browsers and in-app
+  // web views block or auto-cancel (that made "Finish test" appear to do nothing).
+  const confirmDialog = document.getElementById("confirm-dialog");
+  const confirmMessage = document.getElementById("confirm-message");
+  const confirmOk = document.getElementById("confirm-ok");
+  const confirmCancel = document.getElementById("confirm-cancel");
+
+  // Only one question is open at a time. Answering settles it straight away on the
+  // click (not on the dialog's "close" event, which Chrome can delay until the next
+  // paint), and opening a new question cancels any earlier one that was still open.
+  let settleConfirm = null;
+
+  function answerConfirm(value) {
+    const settle = settleConfirm;
+    settleConfirm = null;
+    if (confirmDialog.open) confirmDialog.close();
+    if (settle) settle(value);
+  }
+
+  function askConfirm(message, { ok = "OK", cancel = "Cancel" } = {}) {
+    // A pending answer would otherwise jump the test forward behind the dialog.
+    clearTimeout(autoAdvanceTimer);
+    if (!confirmDialog || typeof confirmDialog.showModal !== "function") {
+      return Promise.resolve(window.confirm(message));
+    }
+    answerConfirm(false);
+    confirmMessage.textContent = message;
+    confirmOk.textContent = ok;
+    confirmCancel.textContent = cancel;
+    return new Promise((resolve) => {
+      settleConfirm = resolve;
+      confirmDialog.showModal();
+      confirmOk.focus();
+    });
+  }
+
+  if (confirmDialog) {
+    confirmOk.addEventListener("click", (e) => { e.preventDefault(); answerConfirm(true); });
+    confirmCancel.addEventListener("click", (e) => { e.preventDefault(); answerConfirm(false); });
+    // Escape, or anything else that closes the dialog, counts as Cancel.
+    confirmDialog.addEventListener("close", () => answerConfirm(false));
+    // Clicking the dimmed backdrop counts as Cancel.
+    confirmDialog.addEventListener("click", (e) => {
+      if (e.target === confirmDialog) answerConfirm(false);
+    });
   }
 
   // ---------- Theme ----------
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
-    themeToggle.textContent = theme === "dark" ? "☀️" : "🌙";
     themeToggle.setAttribute("aria-label", theme === "dark" ? "Switch to light theme" : "Switch to dark theme");
   }
 
@@ -379,9 +640,10 @@
   }
 
   // ---------- Starting and running a test ----------
-  function startTest() {
+  async function startTest() {
     if (!currentTest) return;
-    if (loadProgress() && !window.confirm("Starting a new test will discard the test you have in progress. Continue?")) {
+    if (loadProgress() && !(await askConfirm("Starting a new test will discard the test you have in progress. Continue?",
+      { ok: "Start new test", cancel: "Keep it" }))) {
       return;
     }
 
@@ -406,7 +668,8 @@
     testActive = true;
     lastResult = null;
     finishedAt = 0;
-    showScreen(testScreen);
+    // Retaking from the results screen replaces that step instead of stacking another.
+    showScreen(testScreen, history.state && history.state.screen === "results" ? "replace" : "push");
     buildQuestionMap();
     saveProgress();
     renderQuestion();
@@ -442,6 +705,7 @@
   }
 
   function stopTimers() {
+    clearTimeout(autoAdvanceTimer);
     clearInterval(timerInterval);
     clearInterval(studyInterval);
     timerInterval = null;
@@ -470,19 +734,30 @@
     if (!currentTest.allowNavigation) return;
     Array.from(questionMap.children).forEach((chip, i) => {
       const answered = !isUnanswered(i);
+      // Skipped = seen and left blank (any visit adds time), as opposed to not reached yet.
+      const skipped = !answered && i !== currentIndex && (timesMs[i] > 0 || studied[i]);
       chip.classList.toggle("answered", answered);
+      chip.classList.toggle("skipped", skipped);
       chip.classList.toggle("current", i === currentIndex);
-      chip.setAttribute("aria-label", `Question ${i + 1}, ${answered ? "answered" : "unanswered"}`);
+      const status = answered ? "answered" : skipped ? "skipped" : "not seen yet";
+      chip.setAttribute("aria-label", `Question ${i + 1}, ${status}`);
+      chip.title = `Question ${i + 1}: ${status}`;
       if (i === currentIndex) chip.setAttribute("aria-current", "true");
       else chip.removeAttribute("aria-current");
     });
+    // On phones the map is one swipeable row: keep the current question in view.
+    const current = questionMap.children[currentIndex];
+    if (current && questionMap.scrollWidth > questionMap.clientWidth + 1) {
+      const target = current.offsetLeft - (questionMap.clientWidth - current.offsetWidth) / 2;
+      questionMap.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
+    }
   }
 
   function renderQuestion() {
     clearInterval(studyInterval);
+    clearTimeout(autoAdvanceTimer);
     const q = questions[currentIndex];
     const total = questions.length;
-    const nav = currentTest.allowNavigation;
 
     categoryTag.textContent = capitalize(q.category) || "Question";
     progressLabel.textContent = `Question ${currentIndex + 1} / ${total}`;
@@ -492,10 +767,9 @@
     progressBar.setAttribute("aria-valuenow", String(currentIndex + 1));
     updateTimerDisplay(remainingSeconds());
 
-    btnPrev.classList.toggle("hidden", !nav);
-    btnFinish.classList.toggle("hidden", !nav);
+    // Previous and Finish are on every test; answering moves forward by itself.
     btnPrev.disabled = currentIndex === 0;
-    btnNext.textContent = currentIndex === total - 1 ? "Finish" : "Next";
+    updateFinishButton();
     updateQuestionMap();
 
     if (q.study && !studied[currentIndex]) {
@@ -524,11 +798,11 @@
     questionShownAt = 0;
     optionsEl.innerHTML = "";
     setVisual(q.study.content);
-    btnNext.disabled = true;
     btnSkip.disabled = true;
     btnPrev.disabled = true;
 
     const studyEnds = Date.now() + q.study.seconds * 1000;
+    announce(`Question ${currentIndex + 1} of ${questions.length}. Memorise this, it disappears in ${q.study.seconds} seconds: ${oneLine(q.study.content)}`);
     const renderCountdown = () => {
       const left = Math.max(0, Math.ceil((studyEnds - Date.now()) / 1000));
       questionText.textContent = `Memorise this. It disappears in ${left}s.`;
@@ -544,13 +818,12 @@
   }
 
   function showQuestionBody(q) {
-    const nav = currentTest.allowNavigation;
     questionText.textContent = q.text;
+    announce(`Question ${currentIndex + 1} of ${questions.length}. ${q.text}${q.visual ? ". " + oneLine(q.visual) : ""}`);
     setVisual(q.visual);
 
     btnSkip.disabled = false;
-    btnPrev.disabled = !nav || currentIndex === 0;
-    btnNext.disabled = isUnanswered(currentIndex);
+    btnPrev.disabled = currentIndex === 0;
 
     optionsEl.innerHTML = "";
     const optionButtons = [];
@@ -568,7 +841,7 @@
         } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
           nextPos = (pos - 1 + optionButtons.length) % optionButtons.length;
         } else if (e.key === "Enter" || e.key === " ") {
-          // Enter/Space only selects; moving on is a separate, deliberate action.
+          // Enter/Space selects, which then auto-advances like a click.
           e.preventDefault();
           selectOption(idx);
           return;
@@ -587,15 +860,32 @@
     questionShownAt = Date.now();
   }
 
+  // Picking an answer moves on by itself after a short pause, so the choice is visible
+  // and a mis-tap can be corrected by tapping another option during the pause.
+  // Free-navigation tests also keep Previous and the question map for later changes.
   function selectOption(idx) {
     responses[currentIndex] = idx;
+    // Stop this question's clock at the moment of answering, so the pause
+    // doesn't count against speed-scored tests.
+    leaveQuestion();
     optionsEl.querySelectorAll(".option").forEach((btn, i) => {
       btn.classList.toggle("selected", i === idx);
     });
     optionsEl.querySelectorAll(".option")[idx].focus();
-    btnNext.disabled = false;
     updateQuestionMap();
+    updateFinishButton();
     saveProgress();
+
+    clearTimeout(autoAdvanceTimer);
+    const answeredIndex = currentIndex;
+    if (answeredIndex < questions.length - 1) {
+      autoAdvanceTimer = setTimeout(() => {
+        if (testActive && currentIndex === answeredIndex) goNext();
+      }, AUTO_ADVANCE_MS);
+    } else {
+      // Last question: don't end the test on a tap; point at the Finish button instead.
+      btnFinish.focus();
+    }
   }
 
   // Adds the time spent on the current question to its total.
@@ -614,8 +904,10 @@
     renderQuestion();
   }
 
-  function goNext(skip) {
-    if (skip) responses[currentIndex] = null;
+  // Moves forward. Skip keeps an answer you already gave (so after going back
+  // you can move on without changing it); it only leaves unanswered ones blank.
+  function goNext() {
+    clearTimeout(autoAdvanceTimer);
     leaveQuestion();
     if (currentIndex < questions.length - 1) {
       currentIndex++;
@@ -626,17 +918,27 @@
     }
   }
 
+  // On the last question, once it's answered, Finish becomes the highlighted action.
+  function updateFinishButton() {
+    const ready = currentIndex === questions.length - 1 && !isUnanswered(currentIndex);
+    btnFinish.classList.toggle("finish-ready", ready);
+  }
+
   // Offers a chance to review unanswered questions before ending the test.
-  function requestFinish() {
-    if (currentTest.allowNavigation) {
-      const missing = questions.map((_, i) => i).filter(isUnanswered);
-      if (missing.length) {
-        const list = missing.map((i) => i + 1).join(", ");
-        const noun = missing.length === 1 ? "question" : "questions";
-        if (!window.confirm(`You have ${missing.length} unanswered ${noun} (${list}). Finish anyway?\n\nChoose Cancel to go back and review.`)) {
-          goTo(missing[0]);
-          return;
-        }
+  async function requestFinish() {
+    clearTimeout(autoAdvanceTimer);
+    const missing = questions.map((_, i) => i).filter(isUnanswered);
+    if (missing.length) {
+      const shown = missing.slice(0, 8).map((i) => i + 1).join(", ");
+      const list = missing.length > 8 ? `${shown} and ${missing.length - 8} more` : shown;
+      const noun = missing.length === 1 ? "question" : "questions";
+      const finish = await askConfirm(
+        `You have ${missing.length} unanswered ${noun} (${list}). Finish anyway?`,
+        { ok: "Finish anyway", cancel: "Review questions" });
+      if (!testActive) return; // time ran out while the dialog was open
+      if (!finish) {
+        goTo(missing[0]);
+        return;
       }
     }
     finishTest();
@@ -644,6 +946,7 @@
 
   function finishTest() {
     if (!testActive) return;
+    if (confirmDialog && confirmDialog.open) answerConfirm(false);
     leaveQuestion();
     testActive = false;
     stopTimers();
@@ -652,22 +955,31 @@
     showResults();
   }
 
-  function goBackFromTest() {
+  async function goBackFromTest({ viaHistory = false } = {}) {
     if (testActive) {
-      const ok = window.confirm("Leave this test? Your progress is saved and you can resume from the home screen while there is time left.");
-      if (!ok) return;
+      const ok = await askConfirm("Leave this test? Your progress is saved and you can resume from the home screen while there is time left.",
+        { ok: "Leave test", cancel: "Keep going" });
+      if (!ok || !testActive) return;
       leaveQuestion();
       saveProgress();
     }
     testActive = false;
     stopTimers();
-    goHome();
+    if (viaHistory) {
+      // Finish the Back the visitor asked for: return to the screen before the test.
+      history.back();
+    } else {
+      // The test step becomes the home step, so Back from home doesn't reopen the test.
+      goHome("replace");
+    }
   }
 
-  function goHome() {
+  function goHome(mode = "push") {
+    clearShareHash();
+    viewingShared = false;
     currentTest = null;
     renderHome();
-    showScreen(homeScreen);
+    showScreen(homeScreen, mode);
   }
 
   // ---------- Scoring ----------
@@ -723,16 +1035,14 @@
     if (currentTest.scoringType === "iq") {
       const { mean, sd } = currentTest.norm;
       let z = (rawPercent - mean) / sd;
-      z = Math.max(-3.2, Math.min(3.2, z));
+      // The spread in tests.js is chosen so a perfect run reaches z = 4 (IQ 160).
+      z = Math.max(-3, Math.min(4, z));
       score = Math.max(55, Math.min(160, Math.round(100 + 15 * z)));
       percentile = Math.max(1, Math.min(99, Math.round(normalCDF(z) * 100)));
       band = bandFor(score);
     } else {
       score = Math.round(rawPercent * 100);
-      if (score >= 80) band = "Excellent";
-      else if (score >= 60) band = "Good";
-      else if (score >= 40) band = "Average";
-      else band = "Needs Work";
+      band = percentBand(score);
     }
 
     const categories = currentTest.categories
@@ -812,6 +1122,9 @@
   function showResults() {
     const r = computeResults();
     lastResult = r;
+    lastResultTest = currentTest;
+    lastShareUrl = `${siteUrl()}#r=${encodeResult(currentTest, r)}`;
+    viewingShared = false;
 
     const previous = testHistory(currentTest.id);
     const previousBest = previous.length ? Math.max(...previous.map((h) => h.score)) : null;
@@ -824,12 +1137,71 @@
       seconds: r.elapsedSeconds,
     });
 
-    showScreen(resultsScreen);
+    renderResult(currentTest, r);
 
-    const isIq = currentTest.scoringType === "iq";
+    const historyText = document.getElementById("history-text");
+    if (previousBest === null) {
+      historyText.textContent = "First attempt recorded.";
+    } else if (r.score > previousBest) {
+      historyText.textContent = `New personal best (previous best ${scoreLabel(currentTest, previousBest)}).`;
+    } else {
+      historyText.textContent = `Your best so far: ${scoreLabel(currentTest, Math.max(previousBest, r.score))}.`;
+    }
+
+    document.getElementById("review").classList.remove("hidden");
+    document.getElementById("review").open = false;
+    renderReview();
+
+    btnRetake.textContent = "Retake Test";
+    ownResult = { test: currentTest, r, shareUrl: lastShareUrl, historyText: historyText.textContent };
+  }
+
+  // Back/Forward onto your own results step: redraw it (a shared link may have replaced it).
+  function showOwnResultAgain() {
+    currentTest = ownResult.test;
+    lastResult = ownResult.r;
+    lastResultTest = ownResult.test;
+    lastShareUrl = ownResult.shareUrl;
+    viewingShared = false;
+    renderResult(ownResult.test, ownResult.r);
+    document.getElementById("history-text").textContent = ownResult.historyText;
+    document.getElementById("review").classList.remove("hidden");
+    btnRetake.textContent = "Retake Test";
+  }
+
+  // Opens a result someone shared with a #r=... link.
+  function showSharedResult(code) {
+    const shared = decodeResult(code);
+    if (!shared) {
+      clearShareHash();
+      return false;
+    }
+    testActive = false;
+    stopTimers();
+    currentTest = shared.test;
+    lastResult = shared.result;
+    lastResultTest = shared.test;
+    lastShareUrl = `${siteUrl()}#r=${code}`;
+    viewingShared = true;
+
+    renderResult(shared.test, shared.result);
+    document.getElementById("result-eyebrow").textContent = `Shared result · ${shared.test.title}`;
+    document.getElementById("history-text").textContent = shared.takenAt
+      ? `Taken on ${shared.takenAt.toLocaleDateString()}. Think you can beat it?`
+      : "Think you can beat it?";
+    document.getElementById("review").classList.add("hidden");
+
+    btnRetake.textContent = "Take This Test";
+    return true;
+  }
+
+  function renderResult(test, r) {
+    // Results replace the finished test's step, so Back goes to the test's intro.
+    showScreen(resultsScreen, "replace");
+
+    const isIq = test.scoringType === "iq";
     const percentileText = document.getElementById("percentile-text");
     const detailText = document.getElementById("detail-text");
-    const historyText = document.getElementById("history-text");
 
     document.getElementById("result-eyebrow").textContent = r.testTitle;
     document.getElementById("score-number").textContent = r.score;
@@ -843,23 +1215,14 @@
       percentileText.classList.add("hidden");
     }
 
-    if (currentTest.speed) {
-      const parts = [`Accuracy ${r.accuracyPct}%`];
+    const parts = [];
+    if (test.speed) {
+      if (r.accuracyPct !== null) parts.push(`Accuracy ${r.accuracyPct}%`);
       if (r.avgSeconds !== null) parts.push(`average ${r.avgSeconds.toFixed(1)} s per answer`);
       if (r.speedPct !== null) parts.push(`speed rating ${r.speedPct}%`);
-      detailText.textContent = parts.join(" · ");
-      detailText.classList.remove("hidden");
-    } else {
-      detailText.classList.add("hidden");
     }
-
-    if (previousBest === null) {
-      historyText.textContent = "First attempt recorded.";
-    } else if (r.score > previousBest) {
-      historyText.textContent = `New personal best (previous best ${scoreLabel(currentTest, previousBest)}).`;
-    } else {
-      historyText.textContent = `Your best so far: ${scoreLabel(currentTest, Math.max(previousBest, r.score))}.`;
-    }
+    detailText.textContent = parts.join(" · ");
+    detailText.classList.toggle("hidden", parts.length === 0);
 
     const maxScore = isIq ? 160 : 100;
     const minScore = isIq ? 55 : 0;
@@ -889,20 +1252,267 @@
     document.getElementById("stat-correct").textContent = `${r.correctCount}/${r.totalQuestions}`;
     document.getElementById("stat-time").textContent = formatClock(r.elapsedSeconds);
     document.getElementById("stat-skipped").textContent = String(r.skippedCount);
+    announce(`${r.testTitle} result: ${isIq ? "estimated IQ" : "score"} ${scoreLabel(test, r.score)}, ${r.band}.`);
+  }
 
-    const review = document.getElementById("review");
-    review.open = false;
-    renderReview();
+  // ---------- Result image ----------
+  // Draws a 1080x1350 (4:5, fits phone galleries and stories) card in the current theme.
+  const IMG_W = 1080, IMG_H = 1350;
 
-    btnCopy.textContent = "Copy Result";
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function fitFont(ctx, text, weight, size, family, maxWidth) {
+    let s = size;
+    do {
+      ctx.font = `${weight} ${s}px ${family}`;
+      s -= 2;
+    } while (ctx.measureText(text).width > maxWidth && s > 12);
+  }
+
+  async function drawResultCard(test, r) {
+    const display = '"Space Grotesk", Georgia, serif';
+    const body = '"Inter", "Segoe UI", Roboto, Arial, sans-serif';
+    if (document.fonts && document.fonts.load) {
+      try {
+        await Promise.all([
+          document.fonts.load(`700 150px "Space Grotesk"`),
+          document.fonts.load(`600 30px "Inter"`),
+          document.fonts.load(`500 30px "Inter"`),
+        ]);
+      } catch (e) { /* fall back to system fonts */ }
+    }
+
+    const css = getComputedStyle(document.documentElement);
+    const v = (name) => css.getPropertyValue(name).trim();
+    const dark = document.documentElement.getAttribute("data-theme") === "dark";
+    const C = {
+      bg: v("--bg"),
+      card: dark ? "#1d1b19" : "#fbf7ef",
+      text: v("--text"),
+      muted: v("--text-muted"),
+      primary: v("--primary"),
+      border: v("--border"),
+      track: dark ? "rgba(245,232,208,0.12)" : "rgba(85,65,44,0.10)",
+      grad: dark ? ["#b9583e", "#d2764d", "#d8a064"] : ["#99402f", "#b95438", "#ca7847"],
+      textGrad: dark ? ["#edaa79", "#e6bd84"] : ["#813b2d", "#bc7443"],
+    };
+
+    const canvas = document.createElement("canvas");
+    canvas.width = IMG_W;
+    canvas.height = IMG_H;
+    const ctx = canvas.getContext("2d");
+    const cx = IMG_W / 2;
+    const spaced = (px) => { if ("letterSpacing" in ctx) ctx.letterSpacing = `${px}px`; };
+    const linear = (x0, x1, stops) => {
+      const g = ctx.createLinearGradient(x0, 0, x1, 0);
+      stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+      return g;
+    };
+
+    // Page + warm glow
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, IMG_W, IMG_H);
+    const glow = ctx.createRadialGradient(cx, 330, 40, cx, 330, 720);
+    glow.addColorStop(0, dark ? "rgba(228,154,105,0.22)" : "rgba(201,107,69,0.20)");
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, IMG_W, IMG_H);
+
+    // Card
+    const M = 56;
+    roundRect(ctx, M, M, IMG_W - 2 * M, IMG_H - 2 * M, 44);
+    ctx.fillStyle = C.card;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = C.border;
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+
+    // Eyebrow pill
+    spaced(5);
+    ctx.font = `600 24px ${body}`;
+    const eyebrow = r.testTitle.toUpperCase();
+    const ew = ctx.measureText(eyebrow).width + 64;
+    roundRect(ctx, cx - ew / 2, 116, ew, 54, 27);
+    ctx.fillStyle = dark ? "rgba(228,154,105,0.14)" : "rgba(168,77,55,0.10)";
+    ctx.fill();
+    ctx.fillStyle = C.primary;
+    ctx.fillText(eyebrow, cx + 2.5, 152);
+    spaced(0);
+
+    // Score ring
+    const isIq = test.scoringType === "iq";
+    const ringY = 382, ringR = 158;
+    const pct = Math.max(0, Math.min(1, (r.score - (isIq ? 55 : 0)) / (isIq ? 105 : 100)));
+    ctx.lineCap = "round";
+    ctx.lineWidth = 24;
+    ctx.strokeStyle = C.track;
+    ctx.beginPath();
+    ctx.arc(cx, ringY, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    if (pct > 0) {
+      ctx.strokeStyle = linear(cx - ringR, cx + ringR, C.grad);
+      ctx.beginPath();
+      ctx.arc(cx, ringY, ringR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+      ctx.stroke();
+    }
+
+    ctx.font = `700 150px ${display}`;
+    spaced(-4);
+    ctx.fillStyle = linear(cx - 150, cx + 150, C.textGrad);
+    ctx.fillText(String(r.score), cx, ringY + 46);
+    spaced(4);
+    ctx.font = `600 22px ${body}`;
+    ctx.fillStyle = C.muted;
+    ctx.fillText(isIq ? "ESTIMATED IQ" : "SCORE %", cx, ringY + 92);
+    spaced(0);
+
+    // Band + percentile
+    let y = ringY + ringR + 88;
+    ctx.font = `700 50px ${display}`;
+    ctx.fillStyle = C.text;
+    ctx.fillText(r.band, cx, y);
+    if (r.percentile !== null) {
+      y += 46;
+      ctx.font = `500 26px ${body}`;
+      ctx.fillStyle = C.muted;
+      ctx.fillText(`About the ${ordinal(r.percentile)} percentile (estimate)`, cx, y);
+    }
+
+    // Category bars
+    y += 66;
+    const left = M + 74, right = IMG_W - M - 74;
+    const barX = left + 330, barW = right - barX - 110;
+    r.categories.forEach((c) => {
+      ctx.textAlign = "left";
+      fitFont(ctx, capitalize(c.category), 500, 28, body, barX - left - 24);
+      ctx.fillStyle = C.muted;
+      ctx.fillText(capitalize(c.category), left, y + 10);
+      roundRect(ctx, barX, y - 8, barW, 16, 8);
+      ctx.fillStyle = C.track;
+      ctx.fill();
+      if (c.pct > 0) {
+        roundRect(ctx, barX, y - 8, Math.max(16, barW * c.pct / 100), 16, 8);
+        ctx.fillStyle = linear(barX, barX + barW, C.grad);
+        ctx.fill();
+      }
+      ctx.textAlign = "right";
+      ctx.font = `700 28px ${body}`;
+      ctx.fillStyle = C.text;
+      ctx.fillText(`${c.pct}%`, right, y + 10);
+      y += 54;
+    });
+
+    // Stats
+    y += 18;
+    const stats = [
+      [`${r.correctCount}/${r.totalQuestions}`, "CORRECT"],
+      [formatClock(r.elapsedSeconds), "TIME USED"],
+      [String(r.skippedCount), "UNANSWERED"],
+    ];
+    const gap = 22, boxW = (right - left - gap * 2) / 3, boxH = 116;
+    ctx.textAlign = "center";
+    stats.forEach(([value, label], i) => {
+      const bx = left + i * (boxW + gap);
+      roundRect(ctx, bx, y, boxW, boxH, 24);
+      ctx.fillStyle = dark ? "rgba(255,255,255,0.03)" : "rgba(85,65,44,0.04)";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = C.border;
+      ctx.stroke();
+      ctx.font = `700 44px ${display}`;
+      ctx.fillStyle = C.text;
+      ctx.fillText(value, bx + boxW / 2, y + 62);
+      spaced(3);
+      ctx.font = `600 18px ${body}`;
+      ctx.fillStyle = C.muted;
+      ctx.fillText(label, bx + boxW / 2, y + 93);
+      spaced(0);
+    });
+
+    // Footer: invitation + site link
+    const footY = IMG_H - M - 140;
+    ctx.strokeStyle = C.border;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(left, footY);
+    ctx.lineTo(right, footY);
+    ctx.stroke();
+    ctx.font = `600 30px ${body}`;
+    ctx.fillStyle = C.text;
+    ctx.fillText("Think you can beat it? Take the test:", cx, footY + 62);
+    const link = siteUrl().replace(/^https?:\/\//, "").replace(/\/$/, "");
+    fitFont(ctx, link, 700, 32, body, right - left);
+    ctx.fillStyle = C.primary;
+    ctx.fillText(link, cx, footY + 112);
+
+    return canvas;
+  }
+
+  async function saveResultImage(test, r) {
+    btnSaveImage.disabled = true;
+    btnSaveLabel.textContent = "Drawing...";
+    try {
+      const canvas = await drawResultCard(test, r);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("Could not create image");
+      const fileName = `${test.id}-result-${r.score}.png`;
+
+      // On phones, the share sheet offers "Save image" straight to the photo gallery.
+      const file = typeof File === "function" ? new File([blob], fileName, { type: "image/png" }) : null;
+      const touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+      if (touch && file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: `${r.testTitle} result` });
+          flashSaved("Saved!");
+          return;
+        } catch (err) {
+          if (err && err.name === "AbortError") return;
+          // Otherwise fall through to a normal download.
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      flashSaved("Downloaded!");
+    } catch (e) {
+      flashSaved("Couldn't save");
+    } finally {
+      btnSaveImage.disabled = false;
+      if (btnSaveLabel.textContent === "Drawing...") btnSaveLabel.textContent = "Save image";
+    }
+  }
+
+  function flashSaved(label) {
+    btnSaveLabel.textContent = label;
+    popIcon(btnSaveImage);
+    setTimeout(() => (btnSaveLabel.textContent = "Save image"), 1800);
   }
 
   function resultSummary() {
     const r = lastResult;
-    if (currentTest && currentTest.scoringType === "iq") {
-      return `I scored an estimated ${r.score} IQ on the ${r.testTitle} test (${r.band}, roughly the ${ordinal(r.percentile)} percentile by an assumed distribution).`;
+    const who = viewingShared ? "Someone scored" : "I scored";
+    if (lastResultTest.scoringType === "iq") {
+      const pct = r.percentile !== null ? `, roughly the ${ordinal(r.percentile)} percentile by an assumed distribution` : "";
+      return `${who} an estimated ${r.score} IQ on the ${r.testTitle} test (${r.band}${pct}). Can you beat it?`;
     }
-    return `I scored ${r.score}% on the ${r.testTitle} test (${r.band}).`;
+    return `${who} ${r.score}% on the ${r.testTitle} test (${r.band}). Can you beat it?`;
   }
 
   // ---------- Event listeners ----------
@@ -913,8 +1523,8 @@
   });
 
   btnResume.addEventListener("click", resumeTest);
-  btnDiscard.addEventListener("click", () => {
-    if (window.confirm("Discard the test you have in progress?")) {
+  btnDiscard.addEventListener("click", async () => {
+    if (await askConfirm("Discard the test you have in progress?", { ok: "Discard", cancel: "Keep it" })) {
       clearProgress();
       renderResumeBanner();
     }
@@ -922,8 +1532,8 @@
 
   btnBackInfo.addEventListener("click", goHome);
   btnStartTest.addEventListener("click", startTest);
-  btnClearHistory.addEventListener("click", () => {
-    if (currentTest && window.confirm(`Clear your saved scores for ${currentTest.title}?`)) {
+  btnClearHistory.addEventListener("click", async () => {
+    if (currentTest && await askConfirm(`Clear your saved scores for ${currentTest.title}?`, { ok: "Clear scores" })) {
       clearHistory(currentTest.id);
       renderInfoHistory();
     }
@@ -931,27 +1541,70 @@
 
   btnBackTest.addEventListener("click", goBackFromTest);
   btnPrev.addEventListener("click", () => goTo(currentIndex - 1));
-  btnNext.addEventListener("click", () => goNext(false));
-  btnSkip.addEventListener("click", () => goNext(true));
+  btnSkip.addEventListener("click", goNext);
   btnFinish.addEventListener("click", requestFinish);
 
   btnHome.addEventListener("click", goHome);
-  btnRetake.addEventListener("click", startTest);
-
-  btnCopy.addEventListener("click", () => {
-    if (!lastResult) return;
-    const text = resultSummary();
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(
-        () => {
-          btnCopy.textContent = "Copied!";
-          setTimeout(() => (btnCopy.textContent = "Copy Result"), 1500);
-        },
-        () => window.prompt("Copy your result:", text)
-      );
+  btnRetake.addEventListener("click", () => {
+    if (viewingShared) {
+      // A visitor from a shared link: show the test's intro rather than starting cold.
+      const test = lastResultTest;
+      clearShareHash();
+      viewingShared = false;
+      selectTest(test.id);
     } else {
-      window.prompt("Copy your result:", text);
+      startTest();
     }
+  });
+
+  function popIcon(button) {
+    button.classList.remove("done");
+    void button.offsetWidth; // restart the animation
+    button.classList.add("done");
+  }
+
+  btnShare.addEventListener("click", () => {
+    if (!lastResult) return;
+    shareOrCopy(btnShareLabel, "Share link", {
+      title: `${lastResult.testTitle} result`,
+      text: resultSummary(),
+      url: lastShareUrl,
+    }, () => popIcon(btnShare));
+  });
+
+  btnSaveImage.addEventListener("click", () => {
+    if (!lastResult) return;
+    saveResultImage(lastResultTest, lastResult, viewingShared);
+  });
+
+  btnShareSite.addEventListener("click", () => {
+    btnShareSite.classList.remove("flying");
+    void btnShareSite.offsetWidth;
+    btnShareSite.classList.add("flying");
+    setTimeout(() => btnShareSite.classList.remove("flying"), 1900);
+    shareOrCopy(btnShareSiteLabel, "Pass it on", {
+      title: document.title,
+      text: "Ten quick self-assessments: memory, reasoning, creativity, focus and more.",
+      url: siteUrl(),
+    });
+  });
+
+  // On first visit, slide the tab's label out briefly so people notice it.
+  if (!store.get(KEY_TAB_SEEN)) {
+    setTimeout(() => btnShareSite.classList.add("peek"), 1200);
+    setTimeout(() => btnShareSite.classList.remove("peek"), 4200);
+    store.set(KEY_TAB_SEEN, "1");
+  }
+
+  // Opening or pasting a #r=... link while the page is already open.
+  window.addEventListener("hashchange", () => {
+    if (testActive) return;
+    // Back/Forward between screens is handled by popstate; this is only for a pasted link.
+    if (history.state && history.state.screen) return;
+    const code = sharedCodeFromHash();
+    const shown = code ? showSharedResult(code) : false;
+    // A broken link, or Back past a shared result: don't leave a stale result up.
+    if (!shown && viewingShared) goHome();
   });
 
   // Catch up immediately when a background tab becomes visible again.
@@ -962,4 +1615,6 @@
   // Initialize
   initTheme();
   renderHome();
+  const initialCode = sharedCodeFromHash();
+  if (!(initialCode && showSharedResult(initialCode))) recordScreen(homeScreen, "replace");
 })();
