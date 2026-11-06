@@ -57,6 +57,10 @@
 
 html { scroll-behavior: smooth; }
 
+/* The page never scrolls sideways on phones, even if a decoration pokes past the edge.
+   "clip" (unlike "hidden") doesn't create a scroll container; "hidden" is the fallback. */
+html, body { overflow-x: hidden; overflow-x: clip; }
+
 body {
   margin: 0;
   padding-bottom: 64px;
@@ -72,6 +76,7 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: -1;
   background-image: linear-gradient(var(--page-wash), var(--page-wash)), url("./phoenix-background.png");
   background-position: center;
@@ -92,6 +97,18 @@ body::before {
 #screen-home { max-width: 1100px; }
 #screen-test { max-width: 820px; }
 .hidden { display: none !important; }
+/* Notice for browsers too old to run the tests. */
+.old-browser {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 14px 16px;
+  background: #a84d37;
+  color: #fff;
+  font: 600 15px/1.5 Arial, Helvetica, sans-serif;
+  text-align: center;
+}
+
 /* Visible to screen readers only. */
 .sr-only {
   position: absolute !important;
@@ -205,7 +222,8 @@ h2 { font-size: 24px; line-height: 1.4; margin: 0 0 22px; }
 .home-header::before {
   content: "";
   position: absolute;
-  inset: -18px -8% -14px;
+  top: -18px; right: 0; bottom: -14px; left: 0;
+  inset: -18px 0 -14px; /* never wider than the header: wider made phones scroll sideways */
   z-index: -1;
   background: radial-gradient(ellipse 62% 58% at 50% 55%, var(--header-glow) 0%, var(--header-glow) 42%, transparent 100%);
   pointer-events: none;
@@ -338,8 +356,10 @@ body[data-screen="screen-test"] .share-tab { transform: translate(110%, -50%); }
 .test-card::before {
   content: "";
   position: absolute;
+  top: 0; right: 0; left: 0;
   inset: 0 0 auto 0;
   height: 3px;
+  background: var(--accent);
   background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 35%, #fff));
 }
 .test-card::after {
@@ -354,6 +374,7 @@ body[data-screen="screen-test"] .share-tab { transform: translate(110%, -50%); }
 }
 .test-card:hover, .test-card:focus-within {
   transform: translateY(-3px);
+  border-color: var(--border-strong);
   border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
   box-shadow: 0 24px 55px -32px var(--accent);
 }
@@ -390,6 +411,7 @@ body[data-screen="screen-test"] .share-tab { transform: translate(110%, -50%); }
   font-size: 12px;
   font-weight: 600;
   color: var(--success);
+  background: rgba(78, 118, 84, 0.12);
   background: color-mix(in srgb, var(--success) 12%, transparent);
   align-self: flex-start;
   padding: 4px 10px;
@@ -606,7 +628,7 @@ body[data-screen="screen-test"] .share-tab { transform: translate(110%, -50%); }
 .map-chip:hover { border-color: var(--primary); color: var(--text); }
 .map-chip:focus-visible { outline: 2px solid var(--primary-hover); outline-offset: 2px; }
 .map-chip.answered { background: var(--primary-soft); color: var(--text); border-color: transparent; }
-.map-chip.skipped { border: 1.5px dashed color-mix(in srgb, var(--primary) 70%, transparent); color: var(--primary); }
+.map-chip.skipped { border: 1.5px dashed var(--primary); border-color: color-mix(in srgb, var(--primary) 70%, transparent); color: var(--primary); }
 .map-chip.current { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 6px 14px -6px rgba(153, 64, 47, 0.7); }
 
 /* ---------- Results ---------- */
@@ -624,7 +646,7 @@ body[data-screen="screen-test"] .share-tab { transform: translate(110%, -50%); }
   stroke-dashoffset: 553;
   transition: stroke-dashoffset 1.2s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.score-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.score-center { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .score-number {
   font-family: var(--font-display);
   font-size: 54px;
@@ -671,7 +693,7 @@ body[data-screen="screen-test"] .share-tab { transform: translate(110%, -50%); }
   box-shadow: var(--shadow);
 }
 .theme-toggle:hover { transform: rotate(20deg) scale(1.06); }
-.theme-toggle { display: grid; place-items: center; color: var(--primary); overflow: hidden; }
+.theme-toggle { display: grid; align-items: center; justify-items: center; place-items: center; color: var(--primary); overflow: hidden; }
 .theme-toggle .icon { grid-area: 1 / 1; width: 22px; height: 22px; transition: transform 0.45s cubic-bezier(.4, 1.4, .5, 1), opacity 0.3s ease; }
 /* Shows what you'll switch to: the moon in light mode, the sun in dark mode. */
 .theme-toggle .icon-sun { opacity: 0; transform: rotate(-90deg) scale(0.4); }
@@ -739,8 +761,10 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { overflow-x: hidden; -webkit-tap-highlight-color: transparent; }
 .btn, .option, .map-chip, .test-card { touch-action: manipulation; }
 
-@supports (min-height: 100dvh) {
-  body, .app { min-height: 100dvh; }
+/* Full-height layout. "svh" is the phone's height with the address bar showing and does
+   not change while scrolling; "dvh" did, which re-centred the page as the bar slid away. */
+@supports (min-height: 100svh) {
+  body, .app { min-height: 100svh; }
 }
 
 /* Disable hover-lift effects on touch devices so taps don't leave "stuck" states */

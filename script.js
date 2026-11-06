@@ -299,7 +299,7 @@
       s.classList.toggle("hidden", s !== screen);
     });
     document.body.dataset.screen = screen.id;
-    window.scrollTo({ top: 0, behavior: "instant" });
+    try { window.scrollTo({ top: 0, behavior: "instant" }); } catch (e) { window.scrollTo(0, 0); }
     recordScreen(screen, mode);
   }
 
@@ -760,7 +760,11 @@
     const current = questionMap.children[currentIndex];
     if (current && questionMap.scrollWidth > questionMap.clientWidth + 1) {
       const target = current.offsetLeft - (questionMap.clientWidth - current.offsetWidth) / 2;
-      questionMap.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
+      if (typeof questionMap.scrollTo === "function") {
+        try { questionMap.scrollTo({ left: Math.max(0, target), behavior: "smooth" }); } catch (e) { questionMap.scrollLeft = Math.max(0, target); }
+      } else {
+        questionMap.scrollLeft = Math.max(0, target);
+      }
     }
   }
 

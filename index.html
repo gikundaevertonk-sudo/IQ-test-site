@@ -22,8 +22,9 @@
 <meta name="twitter:card" content="summary_large_image" />
 <script>
   // Apply the saved theme before first paint to avoid a flash of the wrong theme.
+  // Kept to the oldest JavaScript syntax so it runs on any browser.
   try {
-    const savedTheme = localStorage.getItem("itp.theme.v2");
+    var savedTheme = localStorage.getItem("itp.theme.v2");
     if (savedTheme === "light" || savedTheme === "dark") {
       document.documentElement.setAttribute("data-theme", savedTheme);
     }
@@ -236,6 +237,22 @@
     </form>
   </dialog>
 
+  <!-- Shown only on browsers too old to run the tests (roughly before 2017), instead of a broken page. -->
+  <div class="old-browser hidden" id="old-browser" role="alert">
+    This browser is too old to run the tests. Please update it, or open the site in a current
+    version of Chrome, Firefox, Safari, Samsung Internet or Edge.
+  </div>
+  <script>
+    // Plain old JavaScript on purpose: it must run even where script.js can't.
+    (function () {
+      var ok = true;
+      try { new Function("async () => {}; class A {}; let x = `t`;"); } catch (e) { ok = false; }
+      if (!ok || !window.Promise || !window.JSON || !document.querySelector) {
+        var note = document.getElementById("old-browser");
+        if (note) note.className = "old-browser";
+      }
+    })();
+  </script>
   <script src="tests.js"></script>
   <script src="questions.js"></script>
   <script src="script.js"></script>
