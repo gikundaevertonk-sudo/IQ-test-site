@@ -495,6 +495,16 @@
   }
 
   // ---------- Test Info screen ----------
+  // A short label for how the test is scored, shown above its title.
+  function scoringStyle(test) {
+    const bank = QUESTION_BANKS[test.id] || [];
+    if (test.scoringType === "iq") return "Estimated IQ";
+    if (test.speed) return "Accuracy + speed";
+    if (bank.some((q) => q.study)) return "Memorise & recall";
+    if (bank.some((q) => q.scores)) return "Partial credit for strong answers";
+    return "Percentage score";
+  }
+
   function renderInfoHistory() {
     const history = testHistory(currentTest.id);
     infoHistory.classList.toggle("hidden", history.length === 0);
@@ -511,7 +521,7 @@
   function showTestInfo() {
     if (!currentTest) return;
 
-    document.getElementById("info-eyebrow").textContent = "Test Assessment";
+    document.getElementById("info-eyebrow").textContent = scoringStyle(currentTest);
     document.getElementById("info-title").textContent = currentTest.title;
     document.getElementById("info-description").textContent = currentTest.description;
     document.getElementById("info-questions").textContent = currentTest.numQuestions;
@@ -617,7 +627,8 @@
     const left = Math.max(0, Math.ceil((saved.p.endsAt - Date.now()) / 1000));
     resumeText.textContent = left > 0
       ? `${saved.test.title} in progress: ${answered}/${saved.questions.length} answered, ${formatClock(left)} left.`
-      : `${saved.test.title}: time ran out while you were away. Resume to see your result.`;
+      : `${saved.test.title}: time ran out while you were away. Your answers so far are saved.`;
+    btnResume.textContent = left > 0 ? "Resume" : "See result";
     resumeBanner.classList.remove("hidden");
   }
 
@@ -799,6 +810,7 @@
     optionsEl.innerHTML = "";
     setVisual(q.study.content);
     btnSkip.disabled = true;
+    btnFinish.disabled = true; // finishing mid-countdown would end the test on a half-seen item
     btnPrev.disabled = true;
 
     const studyEnds = Date.now() + q.study.seconds * 1000;
@@ -823,6 +835,7 @@
     setVisual(q.visual);
 
     btnSkip.disabled = false;
+    btnFinish.disabled = false;
     btnPrev.disabled = currentIndex === 0;
 
     optionsEl.innerHTML = "";
